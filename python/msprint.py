@@ -24,6 +24,7 @@ from string import split, join
 import air_modes
 from air_modes.exceptions import *
 import math
+import json
 
 #TODO get rid of class and convert to functions
 #no need for class here
@@ -34,9 +35,9 @@ class output_print:
     #sub to every function that starts with "handle"
     self._fns = [int(l[6:]) for l in dir(self) if l.startswith("handle")]
     for i in self._fns:
-      publisher.subscribe("type%i_dl" % i, getattr(self, "handle%i" % i))
+      publisher.subscribe("type%i_dl" % i, self.raw_print)
     
-    publisher.subscribe("modes_dl", self.catch_nohandler)
+    publisher.subscribe("modes_dl", self.raw_print)
 
   @staticmethod
   def prefix(msg):
@@ -47,6 +48,20 @@ class output_print:
         print msg
     else:
         self._callback(msg)
+
+  def raw_print(self, msg):
+      data = {
+          "rssi": msg.rssi,
+          "data": {},
+          "timestamp": msg.timestamp,
+          "ecc": msg.ecc
+      }
+      print dir(msg.data)
+      for field in msg.data.fields.keys():
+          data["data"][field] = msg.data[field]
+      print("========================")
+      print data
+      
 
   def catch_nohandler(self, msg):
     if msg.data.get_type() not in self._fns:
