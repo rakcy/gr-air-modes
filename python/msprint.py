@@ -36,7 +36,7 @@ class output_print:
     self._fns = [int(l[6:]) for l in dir(self) if l.startswith("handle")]
     for i in self._fns:
       publisher.subscribe("type%i_dl" % i, self.raw_print)
-    
+
     publisher.subscribe("modes_dl", self.raw_print)
 
   @staticmethod
@@ -45,23 +45,22 @@ class output_print:
 
   def _print(self, msg):
     if self._callback is None:
-        print msg
+      print msg
     else:
-        self._callback(msg)
+      self._callback(msg)
 
   def raw_print(self, msg):
-      data = {
-          "rssi": msg.rssi,
-          "data": {},
-          "timestamp": msg.timestamp,
-          "ecc": msg.ecc
-      }
-      print dir(msg.data)
-      for field in msg.data.fields.keys():
-          data["data"][field] = msg.data[field]
-      print("========================")
-      print data
-      
+    data = {
+      "rssi": msg.rssi,
+      "data": {},
+      "timestamp": msg.timestamp,
+      "ecc": msg.ecc
+    }
+    print dir(msg.data)
+    for field in msg.data.fields.keys():
+      data["data"][field] = msg.data[field]
+    print("========================")
+    print data
 
   def catch_nohandler(self, msg):
     if msg.data.get_type() not in self._fns:
@@ -72,7 +71,7 @@ class output_print:
       else:
         retstr += " from %.6x" % msg.data["aa"]
       self._print(retstr)
-      
+
   def handle0(self, msg):
     try:
       retstr = output_print.prefix(msg)
