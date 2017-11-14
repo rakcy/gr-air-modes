@@ -63,6 +63,9 @@ class output_print:
     print("========================")
     print data
 
+  def init_plane(self, name):
+    self.planes[name] = {"location":{}}
+
   def catch_nohandler(self, msg):
     if msg.data.get_type() not in self._fns:
       retstr = output_print.prefix(msg)
@@ -146,7 +149,7 @@ class output_print:
   def handle17(self, msg):
     icao24 = msg.data["aa"]
     if icao24 not in self.planes.keys():
-      self.planes[icao24] = {"location":{}}
+      self.init_plane(icao24)
     bdsreg = msg.data["me"].get_type()
     self.planes[icao24]["bdsreg"] = bdsreg
 
