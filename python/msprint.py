@@ -1,23 +1,23 @@
 #
 # Copyright 2010, 2012 Nick Foster
-# 
+#
 # This file is part of gr-air-modes
-# 
+#
 # gr-air-modes is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
 # the Free Software Foundation; either version 3, or (at your option)
 # any later version.
-# 
+#
 # gr-air-modes is distributed in the hope that it will be useful,
 # but WITHOUT ANY WARRANTY; without even the implied warranty of
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 # GNU General Public License for more details.
-# 
+#
 # You should have received a copy of the GNU General Public License
 # along with gr-air-modes; see the file COPYING.  If not, write to
 # the Free Software Foundation, Inc., 51 Franklin Street,
 # Boston, MA 02110-1301, USA.
-# 
+#
 
 import time, os, sys
 from string import split, join
@@ -30,6 +30,7 @@ import json
 #no need for class here
 class output_print:
   planes = {}
+
   def __init__(self, cpr, publisher, callback=None):
     self._cpr = cpr
     self._callback = callback
@@ -77,10 +78,22 @@ class output_print:
       self._print(retstr)
 
   def handle0(self, msg):
+    #Name = speed
+    ident = ""
+    for i in range(0, 8):
+      ident += air_modes.charmap(msg.data["ident"] >> (42-6*i) & 0x3F)
+    print("Handle0 %s" % ident)
+    if ident not in self.planes.keys():
+      self.init_plane(ident)
     try:
       retstr = output_print.prefix(msg)
-      retstr += "Type 0 (short A-A surveillance) from %x at %ift" % (msg.ecc, air_modes.decode_alt(msg.data["ac"], True))
+      alt = air_modes.decode_alt(msg.data["ac"])
+      self.planes[ident]["location"]["altitude"] = alt
+      retstr += "Type 0 (short A-A surveillance) from %x at %ift" % (msg.ecc, alt, True)
+
       ri = msg.data["ri"]
+      self.planes[ident]["ri"] = ri
+
       if ri == 0:
         retstr += " (No TCAS)"
       elif ri == 2:
@@ -93,6 +106,8 @@ class output_print:
         retstr += " (speed <75kt)"
       elif ri > 9:
         retstr += " (speed %i-%ikt)" % (75 * (1 << (ri-10)), 75 * (1 << (ri-9)))
+        #self.planes[speed]["speed1"] = 75 * (1 << (ri-10))
+        #self.planes[speed]["speed2"] = 75 * (1 << (ri-9))
       else:
         raise ADSBError
 
@@ -101,7 +116,11 @@ class output_print:
 
     if msg.data["vs"] is 1:
       retstr += " (aircraft is on the ground)"
+      self.planes[ident]["Grounded"] = True
+    else:
+      self.planes[ident]["Grounded"] = False
 
+    print json.dumps(self.planes, indent=True)
     self._print(retstr)
 
   @staticmethod
@@ -120,15 +139,30 @@ class output_print:
       raise ADSBError
 
   def handle4(self, msg):
+    ident = ""
+    for i in range(0, 8):
+      ident += air_modes.charmap(msg.data["ident"] >> (42-6*i) & 0x3F)
+    print("Handle4 %s" % ident)
+    if ident not in self.planes.keys():
+      self.init_plane(ident)
     try:
       retstr = output_print.prefix(msg)
-      retstr += "Type 4 (short surveillance altitude reply) from %x at %ift" % (msg.ecc, air_modes.decode_alt(msg.data["ac"], True))
-      retstr += output_print.fs_text(msg.data["fs"])    
+      alt = air_modes.decode_alt(msg.data["ac"])
+      self.planes[ident]["location"]["altitude"] = alt
+      retstr += "Type 4 (short surveillance altitude reply) from %x at %ift" % (msg.ecc, alt, True)
+      retstr += output_print.fs_text(msg.data["fs"])
     except ADSBError:
       return
+    print json.dumps(self.planes, indent=True)
     self._print(retstr)
 
   def handle5(self, msg):
+    ident = ""
+    for i in range(0, 8):
+      ident += air_modes.charmap(msg.data["ident"] >> (42-6*i) & 0x3F)
+    print("Handle5 %s" % ident)
+    if ident not in self.planes.keys():
+      self.init_plane(ident)
     try:
       retstr = output_print.prefix(msg)
       retstr += "Type 5 (short surveillance ident reply) from %x with ident %i" % (msg.ecc, air_modes.decode_id(msg.data["id"]))
@@ -138,6 +172,12 @@ class output_print:
     self._print(retstr)
 
   def handle11(self, msg):
+    ident = ""
+    for i in range(0, 8):
+      ident += air_modes.charmap(msg.data["ident"] >> (42-6*i) & 0x3F)
+    print("Handle11 %s" % ident)
+    if ident not in self.planes.keys():
+      self.init_plane(ident)
     try:
       retstr = output_print.prefix(msg)
       retstr += "Type 11 (all call reply) from %x in reply to interrogator %i with capability level %i" % (msg.data["aa"], msg.ecc & 0xF, msg.data["ca"]+1)
@@ -150,6 +190,7 @@ class output_print:
     icao24 = msg.data["aa"]
     if icao24 not in self.planes.keys():
       self.init_plane(icao24)
+    self.planes[icao24]["ecc"] = msg.ecc
     bdsreg = msg.data["me"].get_type()
     self.planes[icao24]["bdsreg"] = bdsreg
 
@@ -222,6 +263,13 @@ class output_print:
     self._print(retstr)
 
   def printTCAS(self, msg):
+    ident = ""
+    for i in range(0, 8):
+      ident += air_modes.charmap(msg.data["ident"] >> (42-6*i) & 0x3F)
+    print("TCAS %s" % ident)
+    if ident not in self.planes.keys():
+      self.init_plane(ident)
+    print "Icao " + msg.data["aa"]
     msgtype = msg.data["df"]
 
     if msgtype == 16:
@@ -272,8 +320,10 @@ class output_print:
     else:
       retstr += " ident %x" % air_modes.decode_id(msg.data["id"])
 
+    print json.dumps(self.planes, indent=True)
     self._print(retstr)
 
   handle16 = printTCAS
   handle20 = printTCAS
   handle21 = printTCAS
+  
