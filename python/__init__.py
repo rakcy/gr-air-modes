@@ -60,7 +60,7 @@ except ImportError:
 from rx_path import rx_path
 from zmq_socket import zmq_pubsub_iface
 from parse import *
-#from msprint import output_print
+from msprint import output_print2
 from custom import output_print
 from sql import output_sql
 from sbs1 import output_sbs1

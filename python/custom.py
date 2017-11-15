@@ -29,7 +29,7 @@ import json
 #TODO get rid of class and convert to functions
 #no need for class here
 class output_print:
-planes = {}
+  planes = {}
   def __init__(self, cpr, publisher, callback=None):
     self._cpr = cpr
     self._callback = callback
@@ -80,10 +80,9 @@ planes = {}
       #Name = speed
     try:
       retstr = output_print.prefix(msg)
-      alt = air_modes.decode_alt(msg.data["ac"]
+      alt = air_modes.decode_alt(msg.data["ac"], True)
       self.planes[speed]["alt"] = alt
-      retstr += "Type 0 (short A-A surveillance) from %x at %ift" % (msg.ecc, alt, True))
-
+      retstr += "Type 0 (short A-A surveillance) from %x at %ift" % (msg.ecc, alt)
       ri = msg.data["ri"]
       self.planes[speed]["ri"] = ri
 
@@ -132,13 +131,12 @@ planes = {}
   def handle4(self, msg):
     try:
       retstr = output_print.prefix(msg)
-      alt = air_modes.decode_alt(msg.data["ac"]
+      alt = air_modes.decode_alt(msg.data["ac"], True)
       self.planes[speed]["alt"] = alt
-      retstr += "Type 4 (short surveillance altitude reply) from %x at %ift" % (msg.ecc, alt, True))
+      retstr += "Type 4 (short surveillance altitude reply) from %x at %ift" % (msg.ecc, alt)
       retstr += output_print.fs_text(msg.data["fs"])
     except ADSBError:
       return
-    print json.dumps(self.planes, indent=True)
     self._print(retstr)
 
   def handle5(self, msg):
@@ -263,7 +261,6 @@ planes = {}
     else:
       retstr += " ident %x" % air_modes.decode_id(msg.data["id"])
 
-+   print json.dumps(self.planes, indent=True)
     self._print(retstr)
 
   handle16 = printTCAS
