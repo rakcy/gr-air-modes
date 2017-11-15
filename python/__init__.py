@@ -1,16 +1,16 @@
 #
 # Copyright 2008,2009 Free Software Foundation, Inc.
-# 
+#
 # This application is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
 # the Free Software Foundation; either version 3, or (at your option)
 # any later version.
-# 
+#
 # This application is distributed in the hope that it will be useful,
 # but WITHOUT ANY WARRANTY; without even the implied warranty of
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 # GNU General Public License for more details.
-# 
+#
 # You should have received a copy of the GNU General Public License along
 # with this program; if not, write to the Free Software Foundation, Inc.,
 # 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
@@ -39,7 +39,7 @@ except ImportError:
 	from DLFCN import RTLD_GLOBAL as _RTLD_GLOBAL
     except ImportError:
 	pass
-    
+
 if _RTLD_GLOBAL != 0:
     _dlopenflags = sys.getdlopenflags()
     sys.setdlopenflags(_dlopenflags|_RTLD_GLOBAL)
@@ -60,7 +60,8 @@ except ImportError:
 from rx_path import rx_path
 from zmq_socket import zmq_pubsub_iface
 from parse import *
-from msprint import output_print
+#from msprint import output_print
+from custom import output_print
 from sql import output_sql
 from sbs1 import output_sbs1
 from kml import output_kml, output_jsonp
