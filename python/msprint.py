@@ -1,23 +1,23 @@
 #
 # Copyright 2010, 2012 Nick Foster
-# 
+#
 # This file is part of gr-air-modes
-# 
+#
 # gr-air-modes is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
 # the Free Software Foundation; either version 3, or (at your option)
 # any later version.
-# 
+#
 # gr-air-modes is distributed in the hope that it will be useful,
 # but WITHOUT ANY WARRANTY; without even the implied warranty of
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 # GNU General Public License for more details.
-# 
+#
 # You should have received a copy of the GNU General Public License
 # along with gr-air-modes; see the file COPYING.  If not, write to
 # the Free Software Foundation, Inc., 51 Franklin Street,
 # Boston, MA 02110-1301, USA.
-# 
+#
 
 import time, os, sys
 from string import split, join
@@ -29,15 +29,17 @@ import json
 #TODO get rid of class and convert to functions
 #no need for class here
 class output_print:
+  planes = {}
+
   def __init__(self, cpr, publisher, callback=None):
     self._cpr = cpr
     self._callback = callback
     #sub to every function that starts with "handle"
     self._fns = [int(l[6:]) for l in dir(self) if l.startswith("handle")]
     for i in self._fns:
-      publisher.subscribe("type%i_dl" % i, self.raw_print)
+      publisher.subscribe("type%i_dl" % i, getattr(self, "handle%i" % i))
 
-    publisher.subscribe("modes_dl", self.raw_print)
+    publisher.subscribe("modes_dl", self.catch_nohandler)
 
   @staticmethod
   def prefix(msg):
@@ -62,6 +64,9 @@ class output_print:
     print("========================")
     print data
 
+  def init_plane(self, name):
+    self.planes[name] = {"location":{}}
+
   def catch_nohandler(self, msg):
     if msg.data.get_type() not in self._fns:
       retstr = output_print.prefix(msg)
@@ -73,10 +78,22 @@ class output_print:
       self._print(retstr)
 
   def handle0(self, msg):
+    #Name = speed
+    ident = ""
+    for i in range(0, 8):
+      ident += air_modes.charmap(msg.data["ident"] >> (42-6*i) & 0x3F)
+    print("Handle0 %s" % ident)
+    if ident not in self.planes.keys():
+      self.init_plane(ident)
     try:
       retstr = output_print.prefix(msg)
-      retstr += "Type 0 (short A-A surveillance) from %x at %ift" % (msg.ecc, air_modes.decode_alt(msg.data["ac"], True))
+      alt = air_modes.decode_alt(msg.data["ac"])
+      self.planes[ident]["location"]["altitude"] = alt
+      retstr += "Type 0 (short A-A surveillance) from %x at %ift" % (msg.ecc, alt, True)
+
       ri = msg.data["ri"]
+      self.planes[ident]["ri"] = ri
+
       if ri == 0:
         retstr += " (No TCAS)"
       elif ri == 2:
@@ -89,6 +106,8 @@ class output_print:
         retstr += " (speed <75kt)"
       elif ri > 9:
         retstr += " (speed %i-%ikt)" % (75 * (1 << (ri-10)), 75 * (1 << (ri-9)))
+        #self.planes[speed]["speed1"] = 75 * (1 << (ri-10))
+        #self.planes[speed]["speed2"] = 75 * (1 << (ri-9))
       else:
         raise ADSBError
 
@@ -97,7 +116,11 @@ class output_print:
 
     if msg.data["vs"] is 1:
       retstr += " (aircraft is on the ground)"
+      self.planes[ident]["Grounded"] = True
+    else:
+      self.planes[ident]["Grounded"] = False
 
+    print json.dumps(self.planes, indent=True)
     self._print(retstr)
 
   @staticmethod
@@ -116,15 +139,30 @@ class output_print:
       raise ADSBError
 
   def handle4(self, msg):
+    ident = ""
+    for i in range(0, 8):
+      ident += air_modes.charmap(msg.data["ident"] >> (42-6*i) & 0x3F)
+    print("Handle4 %s" % ident)
+    if ident not in self.planes.keys():
+      self.init_plane(ident)
     try:
       retstr = output_print.prefix(msg)
-      retstr += "Type 4 (short surveillance altitude reply) from %x at %ift" % (msg.ecc, air_modes.decode_alt(msg.data["ac"], True))
-      retstr += output_print.fs_text(msg.data["fs"])    
+      alt = air_modes.decode_alt(msg.data["ac"])
+      self.planes[ident]["location"]["altitude"] = alt
+      retstr += "Type 4 (short surveillance altitude reply) from %x at %ift" % (msg.ecc, alt, True)
+      retstr += output_print.fs_text(msg.data["fs"])
     except ADSBError:
       return
+    print json.dumps(self.planes, indent=True)
     self._print(retstr)
 
   def handle5(self, msg):
+    ident = ""
+    for i in range(0, 8):
+      ident += air_modes.charmap(msg.data["ident"] >> (42-6*i) & 0x3F)
+    print("Handle5 %s" % ident)
+    if ident not in self.planes.keys():
+      self.init_plane(ident)
     try:
       retstr = output_print.prefix(msg)
       retstr += "Type 5 (short surveillance ident reply) from %x with ident %i" % (msg.ecc, air_modes.decode_id(msg.data["id"]))
@@ -134,6 +172,12 @@ class output_print:
     self._print(retstr)
 
   def handle11(self, msg):
+    ident = ""
+    for i in range(0, 8):
+      ident += air_modes.charmap(msg.data["ident"] >> (42-6*i) & 0x3F)
+    print("Handle11 %s" % ident)
+    if ident not in self.planes.keys():
+      self.init_plane(ident)
     try:
       retstr = output_print.prefix(msg)
       retstr += "Type 11 (all call reply) from %x in reply to interrogator %i with capability level %i" % (msg.data["aa"], msg.ecc & 0xF, msg.data["ca"]+1)
@@ -144,40 +188,63 @@ class output_print:
   #the only one which requires state
   def handle17(self, msg):
     icao24 = msg.data["aa"]
+    if icao24 not in self.planes.keys():
+      self.init_plane(icao24)
+    self.planes[icao24]["ecc"] = msg.ecc
     bdsreg = msg.data["me"].get_type()
+    self.planes[icao24]["bdsreg"] = bdsreg
 
     retstr = output_print.prefix(msg)
     try:
         if bdsreg == 0x08:
           (ident, typestring) = air_modes.parseBDS08(msg.data)
           retstr += "Type 17 BDS0,8 (ident) from %x type %s ident %s" % (icao24, typestring, ident)
+          self.planes[icao24]["typestring"] = typestring
+          self.planes[icao24]["ident"] = ident
 
         elif bdsreg == 0x06:
           [ground_track, decoded_lat, decoded_lon, rnge, bearing] = air_modes.parseBDS06(msg.data, self._cpr)
           retstr += "Type 17 BDS0,6 (surface report) from %x at (%.6f, %.6f) ground track %i" % (icao24, decoded_lat, decoded_lon, ground_track)
+          self.planes[icao24]["location"]["lat"] = decoded_lat
+          self.planes[icao24]["location"]["lon"] = decoded_lon
           if rnge is not None and bearing is not None:
             retstr += " (%.2f @ %.0f)" % (rnge, bearing)
 
         elif bdsreg == 0x05:
           [altitude, decoded_lat, decoded_lon, rnge, bearing] = air_modes.parseBDS05(msg.data, self._cpr)
           retstr += "Type 17 BDS0,5 (position report) from %x at (%.6f, %.6f)" % (icao24, decoded_lat, decoded_lon)
+          self.planes[icao24]["location"]["lat"] = decoded_lat
+          self.planes[icao24]["location"]["lon"] = decoded_lon
           if rnge is not None and bearing is not None:
             retstr += " (" + "%.2f" % rnge + " @ " + "%.0f" % bearing + ")"
           retstr += " at " + str(altitude) + "ft"
+          self.planes[icao24]["location"]["altitude"] = altitude
 
         elif bdsreg == 0x09:
           subtype = msg.data["bds09"].get_type()
+          self.planes[icao24]["subtype"] = subtype
           if subtype == 0:
             [velocity, heading, vert_spd, turnrate] = air_modes.parseBDS09_0(msg.data)
             retstr += "Type 17 BDS0,9-%i (track report) from %x with velocity %.0fkt heading %.0f VS %.0f turn rate %.0f" \
                      % (subtype, icao24, velocity, heading, vert_spd, turnrate)
+            self.planes[icao24]["velocity"] = velocity
+            self.planes[icao24]["heading"] = heading
+            self.planes[icao24]["vert_spd"] = vert_spd
+            self.planes[icao24]["turnrate"] = turnrate
           elif subtype == 1:
             [velocity, heading, vert_spd] = air_modes.parseBDS09_1(msg.data)
             retstr += "Type 17 BDS0,9-%i (track report) from %x with velocity %.0fkt heading %.0f VS %.0f" % (subtype, icao24, velocity, heading, vert_spd)
+            self.planes[icao24]["velocity"] = velocity
+            self.planes[icao24]["heading"] = heading
+            self.planes[icao24]["vert_spd"] = vert_spd
           elif subtype == 3:
             [mag_hdg, vel_src, vel, vert_spd, geo_diff] = air_modes.parseBDS09_3(msg.data)
             retstr += "Type 17 BDS0,9-%i (air course report) from %x with %s %.0fkt magnetic heading %.0f VS %.0f geo. diff. from baro. alt. %.0fft" \
                      % (subtype, icao24, vel_src, vel, mag_hdg, vert_spd, geo_diff)
+            self.planes[icao24]["vel_src"] = vel_src
+            self.planes[icao24]["vel"] = vel
+            self.planes[icao24]["heading"] = heading
+            self.planes[icao24]["vert_spd"] = vert_spd
 
           else:
             retstr += "Type 17 BDS0,9-%i from %x not implemented" % (subtype, icao24)
@@ -185,15 +252,24 @@ class output_print:
         elif bdsreg == 0x62:
           emerg_str = air_modes.parseBDS62(data)
           retstr += "Type 17 BDS6,2 (emergency) from %x type %s" % (icao24, emerg_str)
+          self.planes[icao24]["emergency"] = emerg_str
 
         else:
           retstr += "Type 17 with FTC=%i from %x not implemented" % (msg.data["ftc"], icao24)
     except ADSBError:
         return
 
+    print json.dumps(self.planes, indent=True)
     self._print(retstr)
 
   def printTCAS(self, msg):
+    ident = ""
+    for i in range(0, 8):
+      ident += air_modes.charmap(msg.data["ident"] >> (42-6*i) & 0x3F)
+    print("TCAS %s" % ident)
+    if ident not in self.planes.keys():
+      self.init_plane(ident)
+    print "Icao " + msg.data["aa"]
     msgtype = msg.data["df"]
 
     if msgtype == 16:
@@ -244,8 +320,10 @@ class output_print:
     else:
       retstr += " ident %x" % air_modes.decode_id(msg.data["id"])
 
+    print json.dumps(self.planes, indent=True)
     self._print(retstr)
 
   handle16 = printTCAS
   handle20 = printTCAS
   handle21 = printTCAS
+  
