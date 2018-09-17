@@ -51,6 +51,7 @@ class output_print:
           state = json.loads(data)
       except:
           state = []
+      self.planes['timestamp'] = time.ctime()
       state.append(self.planes)
       testFile.write(json.dumps(state))
       testFile.truncate()
