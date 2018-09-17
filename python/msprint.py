@@ -41,6 +41,21 @@ class output_print:
 
     publisher.subscribe("modes_dl", self.catch_nohandler)
 
+  def update_report(self):
+    with open("./test_report.json", "a+") as testFile:
+        pass
+    with open("./test_report.json", "r+") as testFile:
+      data = testFile.read()
+      testFile.seek(0)
+      try:
+          state = json.loads(data)
+      except:
+          state = []
+      self.planes['timestamp'] = time.ctime()
+      state.append(self.planes)
+      testFile.write(json.dumps(state))
+      testFile.truncate()
+
   @staticmethod
   def prefix(msg):
     return "(%i %.8f) " % (msg.rssi, msg.timestamp)
@@ -121,6 +136,7 @@ class output_print:
       self.planes[ident]["Grounded"] = False
 
     print json.dumps(self.planes, indent=True)
+    self.update_report()
     self._print(retstr)
 
   @staticmethod
@@ -154,6 +170,7 @@ class output_print:
     except ADSBError:
       return
     print json.dumps(self.planes, indent=True)
+    self.update_report()
     self._print(retstr)
 
   def handle5(self, msg):
@@ -260,7 +277,17 @@ class output_print:
         return
 
     print json.dumps(self.planes, indent=True)
+    self.update_report()
     self._print(retstr)
+
+  def _handle24(self, msg):
+    d = {}
+    for i in dir(msg):
+      try:
+        d[i] = str(getattr(msg.data, i))
+      except:
+        d[i] = None
+    self._print(json.dumps(d, indent=True, sort_keys=True))
 
   def printTCAS(self, msg):
     ident = ""
@@ -321,6 +348,8 @@ class output_print:
       retstr += " ident %x" % air_modes.decode_id(msg.data["id"])
 
     print json.dumps(self.planes, indent=True)
+    self.update_report()
+
     self._print(retstr)
 
   handle16 = printTCAS
